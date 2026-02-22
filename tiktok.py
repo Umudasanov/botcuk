@@ -143,7 +143,7 @@ async def handle_media(message: types.Message):
         await status.edit_text("📤 **Hazırdır! Göndərilir...**")
         video_file = FSInputFile(path)
         
-        await message.answer_video(video_file, caption=f"✅ **{platform} yükləndi!**\n🚀 @TikTokAzBot", reply_markup=main_menu())
+        await message.answer_video(video_file, caption=f"✅ **{platform} yükləndi!**\n🚀 admin: @umudhasanovtm", reply_markup=main_menu())
         
         if os.path.exists(path):
             os.remove(path)
@@ -162,3 +162,4 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
+
