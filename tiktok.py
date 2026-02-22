@@ -11,7 +11,7 @@ import yt_dlp
 from flask import Flask
 from threading import Thread
 
-# --- RENDER ÜÇÜN VEB SERVER ---
+# --- RENDER ÜÇÜN DAXİLİ SERVER (Yuxuya getməməsi üçün) ---
 app = Flask('')
 
 @app.route('/')
@@ -30,36 +30,29 @@ ZARAFATLAR = [
     "🛸 Video yoldadır, tıxaca düşüb, indi çatacaq...",
     "🤖 Botumuz qonşunun Wi-Fi-ına bağlanmağa çalışır...",
     "🚀 Videonu loqosuz çıxarmaq üçün TikTok-un qapısını qırıram!",
-    "🧐 Yüklənir... Bu arada, bu gün çox yaraşıqlı/gözəl görünürsən!",
+    "🧐 Yüklənir... Bu arada, bu gün çox yaraşıqlı görünürsən!",
     "☕️ Sən bir çay içənə qədər mən videonu gətirirəm.",
-    "🧗‍♂️ Serverimiz videonu yükləmək üçün dağları aşır, dərələri keçir..."
+    "🧗‍♂️ Serverimiz videonu yükləmək üçün dağları aşır...",
+    "🤫 Şit zarafatlar eləməyim deyə videonu sürətli yükləyirəm."
 ]
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
-# --- MƏLUMAT BAZASI (Xətalara davamlı) ---
-def get_db_connection():
-    conn = sqlite3.connect("tiktok_az.db")
-    return conn
-
-def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)")
-    conn.commit()
-    conn.close()
+# --- MƏLUMAT BAZASI (Render-də daha stabil işləməsi üçün /tmp istifadə edirik) ---
+DB_PATH = "/tmp/tiktok_az.db"
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+cursor = conn.cursor()
+cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)")
+conn.commit()
 
 def save_user(user_id):
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
         conn.commit()
-        conn.close()
     except Exception as e:
-        logging.error(f"Baza yazılma xətası: {e}")
+        logging.error(f"Database error: {e}")
 
 # --- YÜKLƏMƏ FUNKSİYASI ---
 def download_media(url):
@@ -75,7 +68,7 @@ def download_media(url):
         ydl.download([url])
     return output_file
 
-# --- ANA MENYU ---
+# --- ANA MENYU DÜYMƏLƏRİ ---
 def main_menu():
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text="📢 Rəsmi Kanal", url="https://t.me/azernews_az"))
@@ -85,11 +78,11 @@ def main_menu():
     )
     return builder.as_markup()
 
-# --- KOMANDALAR ---
+# --- BOT KOMANDALARI ---
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    save_user(message.from_user.id) # Bazaya qeyd
+    save_user(message.from_user.id)
     caption = (
         f"👋 **Salam, {message.from_user.first_name}!**\n\n"
         "🔥 **TikTok.az** botuna xoş gəlmisən!\n"
@@ -108,28 +101,55 @@ async def process_rate(callback: CallbackQuery):
 
 @dp.message(Command("reklam"))
 async def cmd_reklam(message: types.Message):
-    if message.from_user.id != ADMIN_ID: return
+    if message.from_user.id != ADMIN_ID:
+        return
     args = message.text.split(maxsplit=1)
-    if len(args) < 2: return await message.reply("📝 Reklam mətni yazın.")
+    if len(args) < 2:
+        return await message.reply("📝 Reklam mətni yazın.")
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
     cursor.execute("SELECT user_id FROM users")
     users = cursor.fetchall()
-    conn.close()
-    
     count = 0
     for user in users:
         try:
             await bot.send_message(user[0], f"📢 **TikTok.az Elanı**\n\n{args[1]}", parse_mode="Markdown")
             count += 1
             await asyncio.sleep(0.05)
-        except: continue
-    await message.answer(f"✅ {count} nəfərə göndərildi.")
+        except:
+            continue
+    await message.answer(f"✅ Reklam {count} nəfərə uğurla çatdırıldı.")
 
 # --- VİDEO YÜKLƏMƏ PROSESİ ---
 @dp.message(F.text.contains("tiktok.com") | F.text.contains("instagram.com"))
 async def handle_media(message: types.Message):
-    save_user(message.from_user.id) # Hər ehtimala qarşı burada da qeyd edirik
     platform = "Instagram" if "instagram.com" in message.text else "TikTok"
-    zarafat = random.choice(ZARAFATLAR
+    zarafat = random.choice(ZARAFATLAR)
+    status = await message.answer(f"🚀 **{platform} bağlantısı qurulur...**\n\n_{zarafat}_", parse_mode="Markdown")
+    
+    try:
+        await status.edit_text(f"📥 **Video loqosuz çəkilir...**\n\n_{zarafat}_", parse_mode="Markdown")
+        path = await asyncio.to_thread(download_media, message.text)
+        
+        await status.edit_text("📤 **Hazırdır! Göndərilir...**")
+        video_file = FSInputFile(path)
+        
+        await message.answer_video(video_file, caption=f"✅ **{platform} yükləndi!**\n🚀 @TikTokAzBot", reply_markup=main_menu())
+        
+        if os.path.exists(path):
+            os.remove(path)
+        await status.delete()
+    except Exception as e:
+        await status.edit_text("❌ **Xəta!** Linki yoxlayın və ya profilin açıq olduğundan əmin olun.")
+        logging.error(f"Error: {e}")
+
+async def main():
+    # Veb serveri ayrı bir thread-də başladırıq
+    Thread(target=run_web).start()
+    print("Bot aktivdir...")
+    await dp.start_polling(bot)
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
