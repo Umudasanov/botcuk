@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sqlite3
 import asyncio
 import logging
@@ -8,13 +8,24 @@ from aiogram.filters import Command
 from aiogram.types import FSInputFile, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import yt_dlp
+from flask import Flask
+from threading import Thread
+
+# --- RENDER ÜÇÜN VEB SERVER ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "TikTok.az Bot Aktivdir!"
+
+def run_web():
+    app.run(host='0.0.0.0', port=8080)
 
 # --- KONFİQURASİYA ---
 API_TOKEN = '8372958619:AAEvHAS5aKilEh9xkk4dotSD5n92s0v7AbA'
 ADMIN_ID = 8446711093
-LOGO_PATH = "image_02dbe1.jpg" 
+LOGO_PATH = "image_02dbe1.jpg"
 
-# --- ZARAFATLAR SİYAHISI ---
 ZARAFATLAR = [
     "🛸 Video yoldadır, tıxaca düşüb, indi çatacaq...",
     "☕️ Sən bir çay içənə qədər mən videonu gətirirəm.",
@@ -73,7 +84,7 @@ async def cmd_start(message: types.Message):
     caption = (
         f"👋 **Salam, {message.from_user.first_name}!**\n\n"
         "🔥 **TikTok.az** botuna xoş gəlmisən!\n"
-        "Mən **TikTok** və **Instagram** videolarını saniyələr içində **loqosuz** yükləyirəm.\n\n"
+        "Mən **TikTok** və **Instagram** videolarını loqosuz yükləyirəm.\n\n"
         "📥 **Yükləmək üçün linki göndərin:**"
     )
     if os.path.exists(LOGO_PATH):
@@ -84,13 +95,13 @@ async def cmd_start(message: types.Message):
 @dp.callback_query(F.data == "rate")
 async def process_rate(callback: CallbackQuery):
     await callback.answer("Təşəkkür edirik! ⭐⭐⭐⭐⭐", show_alert=True)
-    await callback.message.answer("🌟 **Dəstəyiniz bizim üçün önəmlidir!**", parse_mode="Markdown")
+    await callback.message.answer("🌟 **Dəstəyiniz bizim üçün çox önəmlidir!**", parse_mode="Markdown")
 
 @dp.message(Command("reklam"))
 async def cmd_reklam(message: types.Message):
     if message.from_user.id != ADMIN_ID: return
     args = message.text.split(maxsplit=1)
-    if len(args) < 2: return await message.reply("📝 Mətn yazın.")
+    if len(args) < 2: return await message.reply("📝 Reklam mətni yazın.")
     
     cursor.execute("SELECT user_id FROM users")
     users = cursor.fetchall()
@@ -103,12 +114,10 @@ async def cmd_reklam(message: types.Message):
         except: continue
     await message.answer(f"✅ {count} nəfərə göndərildi.")
 
-# --- VİDEO YÜKLƏMƏ VƏ ZARAFAT PROSESİ ---
+# --- VİDEO YÜKLƏMƏ ---
 @dp.message(F.text.contains("tiktok.com") | F.text.contains("instagram.com"))
 async def handle_media(message: types.Message):
     platform = "Instagram" if "instagram.com" in message.text else "TikTok"
-    
-    # Təsadüfi zarafat seçirik
     zarafat = random.choice(ZARAFATLAR)
     status = await message.answer(f"🚀 **{platform} bağlantısı qurulur...**\n\n_{zarafat}_", parse_mode="Markdown")
     
@@ -119,11 +128,7 @@ async def handle_media(message: types.Message):
         await status.edit_text("📤 **Hazırdır! Göndərilir...**")
         video_file = FSInputFile(path)
         
-        await message.answer_video(
-            video_file, 
-            caption=f"✅ **{platform} videosu yükləndi!**\n\n🚀 Tiktok.az",
-            reply_markup=main_menu()
-        )
+        await message.answer_video(video_file, caption=f"✅ **{platform} yükləndi!**\n🚀 Tiktok.az", reply_markup=main_menu())
         
         os.remove(path)
         await status.delete()
@@ -132,11 +137,9 @@ async def handle_media(message: types.Message):
         logging.error(f"Error: {e}")
 
 async def main():
-    print("TikTok.az Zarafatcıl Bot Aktivdir!")
+    Thread(target=run_web).start()
+    print("TikTok.az Bot Aktivdir!")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Bot dayandırıldı.")
+    asyncio.run(main())
