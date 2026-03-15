@@ -22,7 +22,7 @@ def run_web():
     app.run(host='0.0.0.0', port=8080)
 
 # --- KONFİQURASİYA ---
-API_TOKEN = '8372958619:AAEvHAS5aKilEh9xkk4dotSD5n92s0v7AbA'
+API_TOKEN = ''
 ADMIN_ID = 8446711093
 LOGO_PATH = "image_02dbe1.jpg"
 
